@@ -1,7 +1,11 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
+import { IncomingMessage, ServerResponse } from "http";
+import { createRequire } from "module";
 import router from "./routes";
+
+const require = createRequire(import.meta.url);
+const pinoHttp = require("pino-http");
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -10,14 +14,14 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req(req) {
+      req(req: IncomingMessage & { id?: string }) {
         return {
           id: req.id,
           method: req.method,
           url: req.url?.split("?")[0],
         };
       },
-      res(res) {
+      res(res: ServerResponse) {
         return {
           statusCode: res.statusCode,
         };
