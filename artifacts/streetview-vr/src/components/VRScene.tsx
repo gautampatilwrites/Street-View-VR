@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { PanoramaInfo } from "@/lib/streetview";
-import { loadGoogleMaps } from "@/lib/maps-loader";
 
 interface VRSceneProps {
   panoramaInfo: PanoramaInfo | null;
@@ -11,89 +10,73 @@ interface VRSceneProps {
 
 export function VRScene({ panoramaInfo, isLoading, onToggleMap, mapVisible }: VRSceneProps) {
   const panoContainerRef = useRef<HTMLDivElement>(null);
-  const panoInstanceRef = useRef<google.maps.StreetViewPanorama | null>(null);
-  const [mapsReady, setMapsReady] = useState(false);
+  const panoRef = useRef<google.maps.StreetViewPanorama | null>(null);
   const [panoError, setPanoError] = useState(false);
 
   useEffect(() => {
-    loadGoogleMaps().then(() => setMapsReady(true));
-  }, []);
+    if (!panoramaInfo || !panoContainerRef.current) return;
 
-  useEffect(() => {
-    if (!mapsReady || !panoContainerRef.current || panoInstanceRef.current) return;
-
-    const pano = new window.google.maps.StreetViewPanorama(panoContainerRef.current, {
-      pano: panoramaInfo?.panoId,
-      position: panoramaInfo
-        ? { lat: panoramaInfo.lat, lng: panoramaInfo.lng }
-        : { lat: 48.8566, lng: 2.3522 },
-      pov: { heading: 0, pitch: 0 },
-      zoom: 0,
-      addressControl: false,
-      showRoadLabels: false,
-      fullscreenControl: false,
-      motionTracking: true,
-      motionTrackingControl: true,
-      linksControl: true,
-      panControl: false,
-      zoomControl: false,
-      enableCloseButton: false,
-    });
-
-    pano.addListener("status_changed", () => {
-      const status = pano.getStatus();
-      if (status === window.google.maps.StreetViewStatus.ZERO_RESULTS) {
-        setPanoError(true);
-      } else {
-        setPanoError(false);
-      }
-    });
-
-    panoInstanceRef.current = pano;
-  }, [mapsReady]);
-
-  useEffect(() => {
-    if (!panoInstanceRef.current || !panoramaInfo) return;
     setPanoError(false);
-    panoInstanceRef.current.setPano(panoramaInfo.panoId);
-    panoInstanceRef.current.setPov({ heading: 0, pitch: 0 });
+
+    if (!panoRef.current) {
+      const pano = new window.google.maps.StreetViewPanorama(panoContainerRef.current, {
+        pano: panoramaInfo.panoId,
+        pov: { heading: 0, pitch: 0 },
+        zoom: 0,
+        addressControl: false,
+        showRoadLabels: false,
+        fullscreenControl: false,
+        motionTracking: true,
+        motionTrackingControl: true,
+        linksControl: true,
+        panControl: true,
+        zoomControl: true,
+        enableCloseButton: false,
+        imageDateControl: false,
+      });
+
+      pano.addListener("status_changed", () => {
+        const status = pano.getStatus();
+        if (status === window.google.maps.StreetViewStatus.ZERO_RESULTS) {
+          setPanoError(true);
+        } else if (status === window.google.maps.StreetViewStatus.OK) {
+          setPanoError(false);
+        }
+      });
+
+      panoRef.current = pano;
+    } else {
+      panoRef.current.setPano(panoramaInfo.panoId);
+      panoRef.current.setPov({ heading: 0, pitch: 0 });
+    }
   }, [panoramaInfo]);
 
   return (
-    <div className="relative w-full h-full bg-black select-none">
+    <div className="relative w-full h-full bg-black">
       <div
         ref={panoContainerRef}
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }}
       />
 
-      {!mapsReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-10 pointer-events-none">
           <div className="text-center space-y-4">
             <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
-            <p className="text-white text-lg font-medium tracking-wide">Initializing Street View...</p>
+            <p className="text-white text-lg font-medium">Loading panorama...</p>
           </div>
         </div>
       )}
 
-      {mapsReady && isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-none">
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
-            <p className="text-white text-lg font-medium tracking-wide">Loading panorama...</p>
-          </div>
-        </div>
-      )}
-
-      {panoError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-none">
+      {panoError && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10 pointer-events-none">
           <div className="text-center space-y-2 px-6">
-            <p className="text-red-400 text-lg font-semibold">No Street View available here</p>
+            <p className="text-red-400 text-lg font-semibold">No Street View here</p>
             <p className="text-white/60 text-sm">Open the map and try a different location</p>
           </div>
         </div>
       )}
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3">
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
         <button
           onClick={onToggleMap}
           className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-semibold text-sm tracking-wide transition-all duration-300 shadow-2xl border ${
@@ -110,16 +93,16 @@ export function VRScene({ panoramaInfo, isLoading, onToggleMap, mapVisible }: VR
       </div>
 
       {panoramaInfo?.description && !mapVisible && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div className="px-4 py-2 bg-black/50 backdrop-blur-md rounded-xl border border-white/10 text-white/80 text-sm font-medium max-w-xs text-center truncate">
             {panoramaInfo.description}
           </div>
         </div>
       )}
 
-      <div className="absolute top-4 right-4 z-10 pointer-events-none">
+      <div className="absolute top-4 right-4 z-20 pointer-events-none">
         <div className="px-3 py-1.5 bg-black/40 backdrop-blur-sm rounded-lg border border-white/10">
-          <span className="text-white/40 text-xs font-medium">Street View VR</span>
+          <span className="text-white/50 text-xs font-medium">Street View VR</span>
         </div>
       </div>
     </div>
